@@ -85,7 +85,7 @@ class PaystackController extends Controller
                 }
 
                 // Initialize the transaction through Paystack service
-                $initializationResult = $this->paystackService->initializeTransaction($request->amount, $user->email, config('app.frontend_url') . '/en/dashboard');
+                $initializationResult = $this->paystackService->initializeTransaction($request->amount, $user->email, config('app.frontend_url') . '/en/payment/paystack');
 
                 // Handle failed initialization attempt
                 if (!$initializationResult['success']) {
@@ -107,7 +107,7 @@ class PaystackController extends Controller
                 return response()->success([
                     'paystack' => $initializationResult['data'],
                     'transaction_id' => $transaction->sqid,
-                ], 'Transaction initialized successfully');
+                ], 'Transaction initiated. Please complete the payment in the new tab.');
             });
         } catch (Exception $e) {
             // Exception handling in case of an error during initialization

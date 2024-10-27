@@ -14,6 +14,7 @@ use App\Services\FCMService;
 use App\Services\StorageProviderService;
 use App\Traits\ExceptionHandlerTrait;
 use App\Utils\Sqid;
+use Carbon\Carbon;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\{JsonResponse, Resources\Json\AnonymousResourceCollection};
@@ -80,11 +81,11 @@ class TransactionController extends Controller
     public function index(IndexRequest $request): JsonResponse|AnonymousResourceCollection|LengthAwarePaginator
     {
         try {
-            $query = Transaction::query()->with('user')
+            $query = Transaction::query()->with(['user', 'paymentMethod'])
                 ->when($request->with_trashed, fn($q) => $q->withTrashed())
-                ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['user.name']))
+                ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['reference','user.name']))
                 ->when($request->order_by, fn($q, $orderBy) => $q->orderBy($orderBy ?? 'name', $request->order_direction ?? 'asc'))
-                ->when($request->start_date && $request->end_date, fn($q) => $q->custom($request->start_date, $request->end_date));
+                ->when($request->start_date && $request->end_date, fn($q) => $q->custom(Carbon::parse($request->start_date), Carbon::parse($request->end_date)));
             $transactions = $query->paginate($request->per_page ?? config('app.per_page'));
             return response()->paginatedSuccess(TransactionResource::collection($transactions), 'Transactions retrieved successfully');
         } catch (Exception $e) {
@@ -102,12 +103,11 @@ class TransactionController extends Controller
     {
         try {
             $user = Auth::user();
-            Log::info($user);
-            $query = $user->transactions()
+            $query = $user->transactions()->with(['user', 'paymentMethod'])
                 ->when($request->with_trashed, fn($q) => $q->withTrashed())
-                ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['description']))
+                ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['reference','description']))
                 ->when($request->order_by, fn($q, $orderBy) => $q->orderBy($orderBy ?? 'created_at', $request->order_direction ?? 'desc'))
-                ->when($request->start_date && $request->end_date, fn($q) => $q->whereBetween('created_at', [$request->start_date, $request->end_date]));
+                ->when($request->start_date && $request->end_date, fn($q) => $q->custom(Carbon::parse($request->start_date), Carbon::parse($request->end_date)));
 
             $transactions = $query->paginate($request->per_page ?? config('app.per_page'));
             return response()->paginatedSuccess(TransactionResource::collection($transactions), 'User transactions retrieved successfully');
@@ -248,8 +248,8 @@ class TransactionController extends Controller
         try {
             return DB::transaction(function () use ($request) {
                 $ids = array_map([Sqid::class, 'decode'], $request->input('sqids', []));
-                $transactions = Transaction::withTrashed()->whereIn('id', $ids)->restore();
-                return response()->success(TransactionResource::collection($transactions), 'Transactions restored successfully');
+                Transaction::withTrashed()->whereIn('id', $ids)->restore();
+                return response()->success(null, 'Transactions restored successfully');
             });
         } catch (NotFoundHttpException|ModelNotFoundException $e) {
             return $this->handleNotFoundException($e);

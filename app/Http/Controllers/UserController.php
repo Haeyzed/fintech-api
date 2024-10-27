@@ -14,6 +14,7 @@ use App\Services\FCMService;
 use App\Services\StorageProviderService;
 use App\Traits\ExceptionHandlerTrait;
 use App\Utils\Sqid;
+use Carbon\Carbon;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\{JsonResponse, Resources\Json\AnonymousResourceCollection};
@@ -84,7 +85,7 @@ class UserController extends Controller
                 ->when($request->with_trashed, fn($q) => $q->withTrashed())
                 ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['name', 'email', 'username', 'phone']))
                 ->when($request->order_by, fn($q, $orderBy) => $q->orderBy($orderBy ?? 'name', $request->order_direction ?? 'asc'))
-                ->when($request->start_date && $request->end_date, fn($q) => $q->custom($request->start_date, $request->end_date));
+                ->when($request->start_date && $request->end_date, fn($q) => $q->custom(Carbon::parse($request->start_date), Carbon::parse($request->end_date)));
             $users = $query->paginate($request->per_page ?? config('app.per_page'));
             return response()->paginatedSuccess(UserResource::collection($users), 'Users retrieved successfully');
         } catch (Exception $e) {
@@ -257,8 +258,8 @@ class UserController extends Controller
         try {
             return DB::transaction(function () use ($request) {
                 $ids = array_map([Sqid::class, 'decode'], $request->input('sqids', []));
-                $users = User::withTrashed()->whereIn('id', $ids)->restore();
-                return response()->success(UserResource::collection($users), 'Users restored successfully');
+                User::withTrashed()->whereIn('id', $ids)->restore();
+                return response()->success(null, 'Users restored successfully');
             });
         } catch (NotFoundHttpException|ModelNotFoundException $e) {
             return $this->handleNotFoundException($e);
