@@ -22,16 +22,20 @@ class StorageProviderService
      * @param StorageProviderEnum $provider The storage provider to use
      * @param int $userId The ID of the user uploading the file
      * @return Upload|null The created Upload model instance or null if upload failed
+     * @throws InvalidArgumentException if the storage provider is unsupported
      */
     public function uploadFile(UploadedFile $file, string $path, StorageProviderEnum $provider, int $userId): ?Upload
     {
-        $uploadMethod = 'uploadTo' . Str::studly($provider->value);
-
-        if (method_exists($this, $uploadMethod)) {
-            return $this->$uploadMethod($file, $path, $userId);
-        }
-
-        throw new InvalidArgumentException("Unsupported storage provider: {$provider->value}");
+        return match ($provider) {
+            StorageProviderEnum::LOCAL => $this->uploadToLocal($file, $path, $userId),
+            StorageProviderEnum::S3 => $this->uploadToS3($file, $path, $userId),
+            StorageProviderEnum::GOOGLE => $this->uploadToGoogle($file, $path, $userId),
+            StorageProviderEnum::CLOUDINARY => $this->uploadToCloudinary($file, $path, $userId),
+            StorageProviderEnum::FTP => $this->uploadToFtp($file, $path, $userId),
+            StorageProviderEnum::SFTP => $this->uploadToSftp($file, $path, $userId),
+            StorageProviderEnum::DROPBOX => $this->uploadToDropbox($file, $path, $userId),
+            default => throw new InvalidArgumentException("Unsupported storage provider: {$provider->value}")
+        };
     }
 
     /**
