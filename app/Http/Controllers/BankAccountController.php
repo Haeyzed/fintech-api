@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exports\DynamicExport;
-use App\Models\User;
+use App\Models\{Currency, Bank, User};
 use App\Rules\SqidExists;
 use App\Http\Requests\{BulkRequest, ExportRequest, ImportRequest, IndexRequest, BankAccountRequest};
 use App\Http\Resources\BankAccountResource;
@@ -37,6 +37,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 class BankAccountController extends Controller
 {
     use ExceptionHandlerTrait;
+
     /**
      * Display a listing of the bank accounts.
      *
@@ -58,10 +59,10 @@ class BankAccountController extends Controller
             'user_id.sqid_exists' => 'The selected user is invalid. Please provide a valid user.',
         ]);
         try {
-            $query = BankAccount::query()->with('user')
+            $query = BankAccount::query()->with(['user', 'bank', 'currency'])
                 ->when($request->with_trashed, fn($q) => $q->withTrashed())
                 ->when($request->user_id ?? Auth::id(), fn($q, $userId) => $q->where('user_id', $userId))
-                ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['bank_name', 'account_number', 'user.name']))
+                ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['bank_name', 'account_number']))
                 ->when($request->order_by, fn($q, $orderBy) => $q->orderBy($orderBy ?? 'created_at', $request->order_direction ?? 'asc'))
                 ->when($request->start_date && $request->end_date, fn($q) => $q->custom($request->start_date, $request->end_date));
             $bankAccounts = $query->paginate($request->per_page ?? config('app.per_page'));
@@ -83,15 +84,21 @@ class BankAccountController extends Controller
             return DB::transaction(function () use ($request) {
                 $data = $request->validated();
 
-                if (isset($data['user_id'])) {
-                    $user = User::findBySqidOrFail($data['user_id']);
-                } else {
-                    $user = auth()->user();
-                }
+                // Find user by ID or default to authenticated user
+                $user = isset($data['user_id'])
+                    ? User::findBySqidOrFail($data['user_id'])
+                    : auth()->user();
+
+                // Find associated currency and bank by ID
+                $currency = Currency::findBySqidOrFail($data['currency_id']);
+                $bank = Bank::findBySqidOrFail($data['bank_id']);
+
+                $data['currency_id'] = $currency->id;
+                $data['bank_id'] = $bank->id;
 
                 $bankAccount = $user->bankAccounts()->create($data);
 
-                // If this is the user's first bank account, set it as primary
+                // Set as primary if it's the user's first bank account
                 if ($user->bankAccounts()->count() === 1) {
                     $bankAccount->update(['is_primary' => true]);
                 }
@@ -133,24 +140,23 @@ class BankAccountController extends Controller
         try {
             return DB::transaction(function () use ($request, $sqid) {
                 $bankAccount = BankAccount::findBySqidOrFail($sqid);
-
                 $data = $request->validated();
 
-                // If user_id is provided and different from the current user, check permissions
-//                if (isset($data['user_id']) && $data['user_id'] !== $bankAccount->user_id) {
-//                    $newUser = User::findBySqidOrFail($data['user_id']);
-//                    $this->authorize('changeOwner', [BankAccount::class, $bankAccount, $newUser]);
-//                    $bankAccount->user()->associate($newUser);
-//                }
+                // Validate and assign currency and bank IDs if provided
+                $data['currency_id'] = isset($data['currency_id'])
+                    ? Currency::findBySqidOrFail($data['currency_id'])->id
+                    : $bankAccount->currency_id;
+
+                $data['bank_id'] = isset($data['bank_id'])
+                    ? Bank::findBySqidOrFail($data['bank_id'])->id
+                    : $bankAccount->bank_id;
 
                 $bankAccount->update($data);
 
-                // If this bank account is set as primary, ensure no other accounts for this user are primary
-                if ($bankAccount->is_primary) {
-                    $bankAccount->user->bankAccounts()
-                        ->where('id', '!=', $bankAccount->id)
-                        ->update(['is_primary' => false]);
-                }
+                // Ensure only one primary account
+                $bankAccount->user->bankAccounts()
+                    ->where('id', '!=', $bankAccount->id)
+                    ->update(['is_primary' => $bankAccount->is_primary ? false : true]);
 
                 return response()->success(new BankAccountResource($bankAccount), 'Bank account updated successfully');
             });

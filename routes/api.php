@@ -3,6 +3,7 @@
 use App\Enums\SocialProviderEnum;
 use App\Http\Controllers\{AuthController,
     BankAccountController,
+    BankController,
     BlockedIpController,
     DashboardController,
     FCMController,
@@ -15,7 +16,8 @@ use App\Http\Controllers\{AuthController,
     TransactionController,
     UploadController,
     UserController,
-    StripeController
+    StripeController,
+    CurrencyController
 };
 use App\Http\Middleware\{Require2FA, Ensure2FASetup};
 use Illuminate\Support\Facades\Route;
@@ -37,6 +39,20 @@ Route::prefix('v1')->group(function () {
     // Upload routes
     Route::apiResource('uploads', UploadController::class)->middleware(['auth:api', '2fa']);
     Route::controller(UploadController::class)->prefix('uploads')->middleware(['auth:api', '2fa'])->group(function () {
+        Route::post('/{sqid}/restore', 'restore');
+        Route::post('/bulk-delete', 'bulkDelete');
+        Route::post('/bulk-restore', 'bulkRestore');
+        Route::delete('/{sqid}/force', 'forceDelete');
+        Route::post('/import', 'import');
+        Route::get('/export', 'export');
+    });
+
+    // Currency routes
+    Route::apiResource('currencies', CurrencyController::class)->middleware(['auth:api', '2fa']);
+
+    // Bank routes
+    Route::apiResource('banks', BankController::class)->middleware(['auth:api', '2fa']);
+    Route::controller(BankController::class)->prefix('banks')->middleware(['auth:api', '2fa'])->group(function () {
         Route::post('/{sqid}/restore', 'restore');
         Route::post('/bulk-delete', 'bulkDelete');
         Route::post('/bulk-restore', 'bulkRestore');

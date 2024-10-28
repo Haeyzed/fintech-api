@@ -23,7 +23,7 @@ class BankAccountRequest extends BaseRequest
     {
         return [
             /**
-             * The account number of the bank account.
+             * The user of the bank account.
              * @var string $user_id
              * @example "1234567890"
              */
@@ -31,17 +31,24 @@ class BankAccountRequest extends BaseRequest
 
             /**
              * The account number of the bank account.
+             * @var string $bank_id
+             * @example "sqiuwu"
+             */
+            'bank_id' => ['nullable', new SqidExists('banks')],
+
+            /**
+             * The unique identifier for the currency associated with the bank.
+             * @var string|null $currency_id
+             * @example "b12345"
+             */
+            'currency_id' => ['nullable', new SqidExists('currencies')],
+
+            /**
+             * The account number of the bank account.
              * @var string $account_number
              * @example "1234567890"
              */
             'account_number' => ['required', 'string', 'max:255'],
-
-            /**
-             * The name of the bank.
-             * @var string $bank_name
-             * @example "Example Bank"
-             */
-            'bank_name' => ['required', 'string', 'max:255'],
 
             /**
              * The type of the bank account.

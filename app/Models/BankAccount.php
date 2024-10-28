@@ -24,8 +24,9 @@ class BankAccount extends Model
      */
     protected $fillable = [
         'user_id',
+        'bank_id',
+        'currency_id',
         'account_number',
-        'bank_name',
         'account_type',
         'balance',
         'is_primary',
@@ -48,6 +49,22 @@ class BankAccount extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the bank that owns the bank account.
+     */
+    public function bank(): BelongsTo
+    {
+        return $this->belongsTo(Bank::class);
+    }
+
+    /**
+     * Get the currency that owns the bank account.
+     */
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class);
     }
 
     /**

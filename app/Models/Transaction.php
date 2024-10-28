@@ -75,6 +75,9 @@ class Transaction extends Model
      */
     public function getFormattedAmountAttribute(): string
     {
-        return '₦' . number_format($this->amount, 2);
+        // Access the related bank account and currency directly.
+        $currency = $this->bankAccount->currency;
+
+        return ($currency ? $currency->symbol : '') . number_format($this->amount, 2);
     }
 }

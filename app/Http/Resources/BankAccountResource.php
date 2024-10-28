@@ -34,13 +34,6 @@ class BankAccountResource extends JsonResource
             'account_number' => $this->account_number,
 
             /**
-             * The name of the bank.
-             * @var string $bank_name
-             * @example "Example Bank"
-             */
-            'bank_name' => $this->bank_name,
-
-            /**
              * The type of the bank account.
              * @var string $account_type
              * @example "savings"
@@ -80,6 +73,18 @@ class BankAccountResource extends JsonResource
              * @var UserResource|null $user
              */
             'user' => new UserResource($this->whenLoaded('user')),
+
+            /**
+             * The currency who owns this bank account.
+             * @var CurrencyResource|null $currency
+             */
+            'currency' => new CurrencyResource($this->whenLoaded('currency')),
+
+            /**
+             * The bank who owns this bank account.
+             * @var BankResource|null $currency
+             */
+            'bank' => new BankResource($this->whenLoaded('bank')),
 
             /**
              * The transactions associated with this bank account.

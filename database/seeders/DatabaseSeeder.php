@@ -7,8 +7,8 @@ use App\Models\BankAccount;
 use App\Models\BlockedIp;
 use App\Models\PassKey;
 use App\Models\PaymentMethod;
-use App\Models\Transaction;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -19,6 +19,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        Model::unguard();
+        $this->call([
+            WorldSeeder::class,
+            BankSeeder::class
+        ]);
         // Create payment methods
 //        $creditCard = PaymentMethod::create([
 //            'type' => PaymentMethodTypeEnum::CREDIT_CARD,
@@ -43,9 +48,9 @@ class DatabaseSeeder extends Seeder
 
         // Create Super Admin
         $superAdmin = User::factory()
-            ->has(BlockedIp::factory(3))
-            ->has(PassKey::factory(3))
-            ->has(BankAccount::factory(2))
+//            ->has(BlockedIp::factory(3))
+//            ->has(PassKey::factory(3))
+//            ->has(BankAccount::factory(2))
 //            ->has(PaymentMethod::factory(2))
             ->create([
                 'name' => 'Super Admin',
@@ -65,9 +70,9 @@ class DatabaseSeeder extends Seeder
 
         // Create John Doe
         $johnDoe = User::factory()
-            ->has(BlockedIp::factory(3))
-            ->has(PassKey::factory(3))
-            ->has(BankAccount::factory(2))
+//            ->has(BlockedIp::factory(3))
+//            ->has(PassKey::factory(3))
+//            ->has(BankAccount::factory(2))
 //            ->has(PaymentMethod::factory(2))
             ->create([
                 'name' => 'John Doe',
@@ -86,10 +91,10 @@ class DatabaseSeeder extends Seeder
 //        ]);
 
         // Create 10 random users with associated data
-        User::factory(10)
-            ->has(BlockedIp::factory(3))
-            ->has(BankAccount::factory(3))
-            ->has(PassKey::factory(3))
+//        User::factory(10)
+//            ->has(BlockedIp::factory(3))
+//            ->has(BankAccount::factory(3))
+//            ->has(PassKey::factory(3))
 //            ->has(PaymentMethod::factory(2))
 //            ->has(
 //                Transaction::factory(5)
@@ -100,6 +105,6 @@ class DatabaseSeeder extends Seeder
 //                        ];
 //                    })
 //            )
-            ->create();
+//            ->create();
     }
 }

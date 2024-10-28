@@ -17,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Class PaystackController
@@ -91,13 +92,18 @@ class PaystackController extends Controller
                 if (!$paymentMethod) {
                     return response()->notFound('Invalid payment method');
                 }
-                $bankAccount = BankAccount::findBySqid($request->bank_account_id)->first();
+                $bankAccount = BankAccount::findBySqid($request->bank_account_id)->where('user_id', $user->id)->first();
                 if (!$bankAccount) {
-                    return response()->notFound('Invalid bank account or not primary account');
+                    return response()->notFound('Invalid bank account');
                 }
 
                 // Initialize the transaction through Paystack service
-                $initializationResult = $this->paystackService->initializeTransaction($request->amount, $user->email, config('app.frontend_url') . '/en/payment/paystack');
+                $initializationResult = $this->paystackService->initializeTransaction(
+                    $request->amount,
+                    $user->email,
+                    config('app.frontend_url') . '/en/payment/paystack',
+                    $bankAccount->bank->currency->code
+                );
 
                 // Handle a failed initialization attempt
                 if (!$initializationResult['success']) {
@@ -158,7 +164,7 @@ class PaystackController extends Controller
             return response()->notFound('Transaction not found');
         }
 
-        // Ensure transaction is in a pending state before verification
+        // Ensure the transaction is in a pending state before verification
         if ($transaction->status !== TransactionStatusEnum::PENDING) {
             return response()->badRequest('Transaction is not in a pending state');
         }
@@ -252,7 +258,7 @@ class PaystackController extends Controller
         if (!$paymentMethod) {
             return response()->notFound('Invalid payment method');
         }
-        $bankAccount = BankAccount::findBySqid($request->bank_account_id)->first();
+        $bankAccount = BankAccount::findBySqid($request->bank_account_id)->where('user_id', $user->id)->first();
         if (!$bankAccount) {
             return response()->notFound('Invalid bank account');
         }
@@ -301,7 +307,7 @@ class PaystackController extends Controller
     /**
      * Initiate a withdrawal to a user's bank account.
      *
-     * This method handles withdrawal requests, including:
+     * This method handles withdrawal requests, including
      * - Validating the request
      * - Confirming sufficient balance
      * - Initiating the withdrawal process through Paystack
@@ -355,8 +361,8 @@ class PaystackController extends Controller
             return response()->notFound('Invalid payment method');
         }
 
-        // Fetch primary bank account
-        $bankAccount = BankAccount::findBySqid($request->bank_account_id)->first();
+        // Fetch a bank account
+        $bankAccount = BankAccount::findBySqid($request->bank_account_id)->where('user_id', $user->id)->first();
         if (!$bankAccount) {
             return response()->notFound('Invalid bank account');
         }

@@ -49,7 +49,7 @@ class PaystackService
      * @return array The result of the initialization process.
      * @throws ConnectionException
      */
-    public function initializeTransaction(float $amount, string $email, ?string $callbackUrl): array
+    public function initializeTransaction(float $amount, string $email, ?string $callbackUrl, ?string $currency): array
     {
         $reference = $this->generateUniqueReference();
 
@@ -61,6 +61,7 @@ class PaystackService
             'amount' => $amount * 100,
             'reference' => $reference,
             'callback_url' => $callbackUrl,
+            'currency' => $currency,
         ]);
 
         if ($response->successful() && $response['status'] === true) {
