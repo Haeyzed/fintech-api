@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\StorageProviderEnum;
 use App\Exports\DynamicExport;
+use App\Rules\SqidExists;
 use App\Http\Requests\{BulkRequest, ExportRequest, ImportRequest, IndexRequest, TransactionRequest};
 use App\Http\Resources\TransactionResource;
 use App\Imports\DynamicImport;
@@ -80,12 +81,26 @@ class TransactionController extends Controller
      */
     public function index(IndexRequest $request): JsonResponse|AnonymousResourceCollection|LengthAwarePaginator
     {
+        $request->validate([
+            /**
+             * @query
+             * The user to filter by.
+             * @var string|null $user_id
+             * @example "sqid1"
+             */
+            'user_id' => ['nullable', new SqidExists('users')],
+        ], [
+            'user_id.sqid_exists' => 'The selected user is invalid. Please provide a valid user.',
+        ]);
+
         try {
-            $query = Transaction::query()->with(['user', 'paymentMethod'])
+            $query = Transaction::query()->with(['user', 'paymentMethod','bankAccount'])
                 ->when($request->with_trashed, fn($q) => $q->withTrashed())
+                ->when($request->user_id ?? Auth::id(), fn($q, $userId) => $q->where('user_id', $userId))
                 ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['reference', 'description']))
                 ->when($request->order_by, fn($q, $orderBy) => $q->orderBy($orderBy ?? 'name', $request->order_direction ?? 'asc'))
                 ->when($request->start_date && $request->end_date, fn($q) => $q->custom(Carbon::parse($request->start_date), Carbon::parse($request->end_date)));
+
             $transactions = $query->paginate($request->per_page ?? config('app.per_page'));
             return response()->paginatedSuccess(TransactionResource::collection($transactions), 'Transactions retrieved successfully');
         } catch (Exception $e) {

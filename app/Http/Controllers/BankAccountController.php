@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\DynamicExport;
 use App\Models\User;
+use App\Rules\SqidExists;
 use App\Http\Requests\{BulkRequest, ExportRequest, ImportRequest, IndexRequest, BankAccountRequest};
 use App\Http\Resources\BankAccountResource;
 use App\Imports\DynamicImport;
@@ -45,9 +46,21 @@ class BankAccountController extends Controller
      */
     public function index(IndexRequest $request): JsonResponse|AnonymousResourceCollection|LengthAwarePaginator
     {
+        $request->validate([
+            /**
+             * @query
+             * The user to filter by.
+             * @var string|null $user_id
+             * @example "sqid1"
+             */
+            'user_id' => ['nullable', new SqidExists('users')],
+        ], [
+            'user_id.sqid_exists' => 'The selected user is invalid. Please provide a valid user.',
+        ]);
         try {
             $query = BankAccount::query()->with('user')
                 ->when($request->with_trashed, fn($q) => $q->withTrashed())
+                ->when($request->user_id ?? Auth::id(), fn($q, $userId) => $q->where('user_id', $userId))
                 ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['bank_name', 'account_number', 'user.name']))
                 ->when($request->order_by, fn($q, $orderBy) => $q->orderBy($orderBy ?? 'created_at', $request->order_direction ?? 'asc'))
                 ->when($request->start_date && $request->end_date, fn($q) => $q->custom($request->start_date, $request->end_date));

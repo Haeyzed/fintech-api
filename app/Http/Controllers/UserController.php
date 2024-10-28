@@ -380,28 +380,4 @@ class UserController extends Controller
             return $this->handleException($e, 'unblocking the IP address');
         }
     }
-
-    /**
-     * Get transactions for the authenticated user.
-     *
-     * @param IndexRequest $request
-     * @return JsonResponse|AnonymousResourceCollection
-     */
-    public function getUserTransactions(IndexRequest $request): JsonResponse|AnonymousResourceCollection
-    {
-        try {
-            $user = Auth::user();
-            $query = $user->transactions()
-                ->with(['paymentMethod', 'bankAccount', 'user'])
-                ->when($request->with_trashed, fn($q) => $q->withTrashed())
-                ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['reference', 'description']))
-                ->when($request->order_by, fn($q, $orderBy) => $q->orderBy($orderBy ?? 'created_at', $request->order_direction ?? 'desc'))
-                ->when($request->start_date && $request->end_date, fn($q) => $q->whereBetween('created_at', [Carbon::parse($request->start_date), Carbon::parse($request->end_date)]));
-
-            $transactions = $query->paginate($request->per_page ?? config('app.per_page'));
-            return response()->paginatedSuccess(TransactionResource::collection($transactions), 'User transactions retrieved successfully');
-        } catch (Exception $e) {
-            return $this->handleException($e, 'fetching user transactions');
-        }
-    }
 }

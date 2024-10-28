@@ -33,7 +33,6 @@ Route::prefix('v1')->group(function () {
         Route::post('/{sqid}/block-ip/{ipAddress}', 'blockIp');
         Route::delete('/{sqid}/unblock-ip/{ipAddress}', 'unblockIp');
     });
-    Route::get('user/transactions', [UserController::class, 'getUserTransactions']);
 
     // Upload routes
     Route::apiResource('uploads', UploadController::class)->middleware(['auth:api', '2fa']);

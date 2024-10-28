@@ -17,7 +17,7 @@ class BlockedIpResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->id,
+            'id' => $this->sqid,
             'ip_address' => $this->ip_address,
             'reason' => $this->reason,
             'blocked_until' => $this->blocked_until ? $this->blocked_until->toDateTimeString() : null,

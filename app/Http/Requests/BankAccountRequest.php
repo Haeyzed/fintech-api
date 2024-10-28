@@ -52,10 +52,10 @@ class BankAccountRequest extends BaseRequest
 
             /**
              * The current balance of the bank account.
-             * @var float $balance
+             * @var float|null $balance
              * @example 1000.50
              */
-            'balance' => ['required', 'numeric', 'min:0'],
+            'balance' => ['nullable', 'numeric', 'min:0'],
 
             /**
              * Indicates whether this is the primary bank account for the user.

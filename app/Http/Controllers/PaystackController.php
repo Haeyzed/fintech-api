@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\TransactionStatusEnum;
 use App\Enums\TransactionTypeEnum;
 use App\Http\Resources\TransactionResource;
+use App\Models\BankAccount;
 use App\Models\PaymentMethod;
 use App\Models\Transaction;
 use App\Rules\SqidExists;
@@ -73,6 +74,13 @@ class PaystackController extends Controller
              * @example uw2YK1rnl0
              */
             'payment_method_id' => ['required', new SqidExists('payment_methods')],
+
+            /**
+             * The ID of the payment method to be used for the transaction.
+             * @var string $bank_account_id
+             * @example EfhxLZ9ck8
+             */
+            'bank_account_id' => ['required', new SqidExists('bank_accounts')],
         ]);
 
         try {
@@ -83,11 +91,15 @@ class PaystackController extends Controller
                 if (!$paymentMethod) {
                     return response()->notFound('Invalid payment method');
                 }
+                $bankAccount = BankAccount::findBySqid($request->bank_account_id)->first();
+                if (!$bankAccount) {
+                    return response()->notFound('Invalid bank account or not primary account');
+                }
 
                 // Initialize the transaction through Paystack service
                 $initializationResult = $this->paystackService->initializeTransaction($request->amount, $user->email, config('app.frontend_url') . '/en/payment/paystack');
 
-                // Handle failed initialization attempt
+                // Handle a failed initialization attempt
                 if (!$initializationResult['success']) {
                     return response()->badRequest('Transaction initialization failed: ' . $initializationResult['message']);
                 }
@@ -96,6 +108,7 @@ class PaystackController extends Controller
                 $transaction = new Transaction([
                     'user_id' => $user->id,
                     'payment_method_id' => $paymentMethod->id,
+                    'bank_account_id' => $bankAccount->id,
                     'type' => TransactionTypeEnum::DEPOSIT,
                     'amount' => $request->amount,
                     'status' => TransactionStatusEnum::PENDING,
@@ -165,6 +178,12 @@ class PaystackController extends Controller
             if ($verificationResult['data']['status'] === 'success') {
                 return DB::transaction(function () use ($transaction, $verificationResult) {
                     $transaction->status = TransactionStatusEnum::COMPLETED;
+
+                    // Update the bank-account balance
+                    $bankAccount = $transaction->bankAccount;
+                    $bankAccount->balance += $transaction->amount;
+                    $bankAccount->save();
+
                     $transaction->save();
 
                     // Update the user's balance upon successful transaction
@@ -178,7 +197,7 @@ class PaystackController extends Controller
                     ], 'Transaction verified and completed successfully');
                 });
             } else {
-                // Mark transaction as failed if payment was unsuccessful
+                // Mark the transaction as failed if payment was unsuccessful
                 $transaction->status = TransactionStatusEnum::FAILED;
                 $transaction->save();
                 return response()->badRequest('Payment was not successful');
@@ -218,6 +237,13 @@ class PaystackController extends Controller
              * @example EfhxLZ9ck8
              */
             'payment_method_id' => ['required', new SqidExists('payment_methods')],
+
+            /**
+             * The ID of the payment method to be used for the transaction.
+             * @var string $bank_account_id
+             * @example EfhxLZ9ck8
+             */
+            'bank_account_id' => ['required', new SqidExists('bank_accounts')],
         ]);
 
         // Fetch user and validate active payment method
@@ -226,13 +252,18 @@ class PaystackController extends Controller
         if (!$paymentMethod) {
             return response()->notFound('Invalid payment method');
         }
+        $bankAccount = BankAccount::findBySqid($request->bank_account_id)->first();
+        if (!$bankAccount) {
+            return response()->notFound('Invalid bank account');
+        }
 
         try {
             // Process payment using Paystack authorization
-            return DB::transaction(function () use ($request, $user, $paymentMethod) {
+            return DB::transaction(function () use ($request, $user, $paymentMethod, $bankAccount) {
                 $transaction = new Transaction([
                     'user_id' => $user->id,
                     'payment_method_id' => $paymentMethod->id,
+                    'bank_account_id' => $bankAccount->id,
                     'type' => 'deposit',
                     'amount' => $request->amount,
                     'status' => TransactionStatusEnum::PENDING,
@@ -295,6 +326,20 @@ class PaystackController extends Controller
              * @example uw2YK1rnl0
              */
             'payment_method_id' => ['required', new SqidExists('payment_methods')],
+
+            /**
+             * The ID of the payment method to be used for the transaction.
+             * @var string $bank_account_id
+             * @example EfhxLZ9ck8
+             */
+            'bank_account_id' => ['required', new SqidExists('bank_accounts')],
+
+            /**
+             * The reference code of the withdrawal.
+             * @var string|null $reference_code
+             * @example 500
+             */
+            'reference_code' => ['nullable', 'string'],
         ]);
 
         $user = Auth::user();
@@ -310,11 +355,18 @@ class PaystackController extends Controller
             return response()->notFound('Invalid payment method');
         }
 
+        // Fetch primary bank account
+        $bankAccount = BankAccount::findBySqid($request->bank_account_id)->first();
+        if (!$bankAccount) {
+            return response()->notFound('Invalid bank account');
+        }
+
         try {
-            return DB::transaction(function () use ($request, $user, $paymentMethod) {
+            return DB::transaction(function () use ($request, $user, $paymentMethod, $bankAccount) {
                 $transaction = new Transaction([
                     'user_id' => $user->id,
                     'payment_method_id' => $paymentMethod->id,
+                    'bank_account_id' => $bankAccount->id,
                     'type' => TransactionTypeEnum::WITHDRAWAL,
                     'amount' => $request->amount,
                     'status' => TransactionStatusEnum::PENDING,
@@ -322,7 +374,7 @@ class PaystackController extends Controller
                 ]);
                 $transaction->save();
 
-                $transferResult = $this->paystackService->initiateWithdrawal($request->amount, $user->email);
+                $transferResult = $this->paystackService->initiateWithdrawal($request->amount, $request->reference_code);
 
                 if (!$transferResult['success']) {
                     throw new Exception($transferResult['message']);
@@ -332,12 +384,18 @@ class PaystackController extends Controller
                 $transaction->reference = $transferResult['data']['reference'];
                 $transaction->save();
 
+                // Update user's balance
                 $user->balance -= $request->amount;
                 $user->save();
+
+                // Update bank account balance
+                $bankAccount->balance -= $request->amount;
+                $bankAccount->save();
 
                 return response()->success([
                     'transaction' => new TransactionResource($transaction),
                     'new_balance' => $user->balance,
+                    'new_bank_account_balance' => $bankAccount->balance,
                 ], 'Withdrawal successful');
             });
         } catch (Exception $e) {
