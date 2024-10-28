@@ -20,15 +20,15 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // Create payment methods
-        $creditCard = PaymentMethod::create([
-            'type' => PaymentMethodTypeEnum::CREDIT_CARD,
-            'details' => ['brand' => 'Visa', 'last4' => '4242'],
-        ]);
+//        $creditCard = PaymentMethod::create([
+//            'type' => PaymentMethodTypeEnum::CREDIT_CARD,
+//            'details' => ['brand' => 'Visa', 'last4' => '4242'],
+//        ]);
 
-        $paypal = PaymentMethod::create([
-            'type' => PaymentMethodTypeEnum::PAYPAL,
-            'details' => ['email' => 'paypal@example.com'],
-        ]);
+//        $paypal = PaymentMethod::create([
+//            'type' => PaymentMethodTypeEnum::PAYPAL,
+//            'details' => ['email' => 'paypal@example.com'],
+//        ]);
 
         $paystack = PaymentMethod::create([
             'type' => PaymentMethodTypeEnum::PAYSTACK,
@@ -36,10 +36,10 @@ class DatabaseSeeder extends Seeder
             'is_active' => true,
         ]);
 
-        $stripe = PaymentMethod::create([
-            'type' => PaymentMethodTypeEnum::STRIPE,
-            'details' => ['email' => 'stripe@example.com'],
-        ]);
+//        $stripe = PaymentMethod::create([
+//            'type' => PaymentMethodTypeEnum::STRIPE,
+//            'details' => ['email' => 'stripe@example.com'],
+//        ]);
 
         // Create Super Admin
         $superAdmin = User::factory()

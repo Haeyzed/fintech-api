@@ -100,6 +100,11 @@ class PaystackController extends Controller
                     'amount' => $request->amount,
                     'status' => TransactionStatusEnum::PENDING,
                     'description' => 'Deposit via Paystack',
+//                    'details' => [
+//                        "authorization_url" => $initializationResult['data']['authorization_url'],
+//                        "access_code" => $initializationResult['data']['access_code'],
+//                        "reference" => $initializationResult['data']['reference']
+//                    ],
                     'reference' => $initializationResult['data']['reference'],
                 ]);
                 $transaction->save();
@@ -136,7 +141,7 @@ class PaystackController extends Controller
 
         // Retrieve the transaction based on the reference code
         $transaction = Transaction::where('reference', $request->reference)->firstOrFail();
-        if (!$transaction){
+        if (!$transaction) {
             return response()->notFound('Transaction not found');
         }
 

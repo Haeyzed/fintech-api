@@ -12,7 +12,7 @@ use App\Http\Requests\{ChangePasswordRequest,
     UpdateProfileRequest,
     Verify2FARequest};
 use App\Http\Resources\UserResource;
-use App\Models\{BlockedIp, Upload, User};
+use App\Models\{BlockedIp, DeviceToken, Upload, User};
 use App\Services\{FCMService, StorageProviderService};
 use App\Traits\ExceptionHandlerTrait;
 use Carbon\Carbon;
@@ -144,7 +144,7 @@ class AuthController extends Controller
 
             $credentials = $request->only('email', 'password');
 
-            if (!Auth::attempt($credentials)) {
+            if (!$token = Auth::attempt($credentials)) {
                 return response()->unauthorized('Invalid login credentials');
             }
 
@@ -162,9 +162,6 @@ class AuthController extends Controller
                     'user_id' => $user->sqid
                 ], '2FA verification required');
             }
-
-            $token = JWTAuth::fromUser($user);
-            JWTAuth::setToken($token);
 
             return $this->updateLoginInfo($request, $token);
         } catch (Exception $e) {
@@ -214,6 +211,11 @@ class AuthController extends Controller
     public function register(RegisterRequest $request): UserResource|JsonResponse
     {
         try {
+            // Check if the device token has been used
+            $existingToken = DeviceToken::where('token', $request->device_token)->first();
+            if ($existingToken) {
+                return response()->badRequest('Device token has already been used');
+            }
             return DB::transaction(function () use ($request) {
                 $user = User::create([
                     'name' => $request->name,
@@ -241,18 +243,12 @@ class AuthController extends Controller
 
                 event(new Registered($user));
 
-                $token = JWTAuth::fromUser($user);
-                JWTAuth::setToken($token);
-
                 Auth::login($user);
 
                 $user->sendEmailVerificationNotification();
 
                 return response()->created([
                     'user' => new UserResource($user),
-                    'token' => $token,
-                    'token_type' => 'Bearer',
-                    'expires_in' => JWTAuth::factory()->getTTL() * 60,
                 ], 'User registered successfully. Please check your email for verification.');
             });
         } catch (Exception $e) {
@@ -268,7 +264,7 @@ class AuthController extends Controller
      * @param string $hash
      * @return JsonResponse
      */
-    public function verify(Request $request, $id, $hash): JsonResponse
+    public function verify(Request $request, string $id, string $hash): JsonResponse
     {
         try {
             $user = User::findOrFail($id);
@@ -285,17 +281,11 @@ class AuthController extends Controller
                 event(new Verified($user));
             }
 
-            $token = JWTAuth::fromUser($user);
-            JWTAuth::setToken($token);
-
             Auth::login($user);
 
             return response()->success([
                 'user' => new UserResource($user),
-                'token' => $token,
-                'token_type' => 'Bearer',
-                'expires_in' => JWTAuth::factory()->getTTL() * 60,
-            ], 'Email has been verified and user logged in successfully');
+            ], 'Email has been verified successfully');
         } catch (Exception $e) {
             return $this->handleException($e, 'verifying email');
         }
@@ -330,7 +320,7 @@ class AuthController extends Controller
     public function forgotPassword(Request $request): JsonResponse
     {
         try {
-            $request->validate(['email' => ['required','email']]);
+            $request->validate(['email' => ['required', 'email']]);
             $status = Password::sendResetLink($request->only('email'));
             if ($status === Password::RESET_LINK_SENT) {
                 return response()->success(null, __($status));
@@ -395,11 +385,7 @@ class AuthController extends Controller
     public function profile(): JsonResponse
     {
         try {
-//            $user = Auth::user();
-            if (!$user = JWTAuth::parseToken()->authenticate()) {
-                return response()->notFound('User not found');
-            }
-            return response()->success(new UserResource($user), 'User profile retrieved successfully');
+            return response()->success(new UserResource(auth()->user()), 'User profile retrieved successfully');
         } catch (Exception $e) {
             return $this->handleException($e, 'retrieving the user profile');
         }
@@ -459,8 +445,7 @@ class AuthController extends Controller
     public function logout(): JsonResponse
     {
         try {
-            JWTAuth::invalidate(JWTAuth::getToken());
-            Auth::logout();
+            auth()->logout();
             return response()->success(null, 'User successfully logged out');
         } catch (Exception $e) {
             return $this->handleException($e, 'logging out');
@@ -475,9 +460,7 @@ class AuthController extends Controller
     public function refresh(): JsonResponse
     {
         try {
-            $newToken = JWTAuth::refresh(JWTAuth::getToken());
-            JWTAuth::setToken($newToken);
-            return response()->success(['token' => $newToken], 'Token successfully refreshed');
+            return response()->success(['token' => auth()->refresh()], 'Token successfully refreshed');
         } catch (Exception $e) {
             return $this->handleException($e, 'refreshing the token');
         }

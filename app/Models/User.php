@@ -165,9 +165,7 @@ class User extends Authenticatable implements JWTSubject, MustVerifyEmail
     }
 
     /**
-     * Get the transactions associated with the user.
-     *
-     * @return HasMany
+     * Get the transactions for the user.
      */
     public function transactions(): HasMany
     {

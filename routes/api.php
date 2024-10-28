@@ -15,7 +15,8 @@ use App\Http\Controllers\{AuthController,
     TransactionController,
     UploadController,
     UserController,
-    StripeController};
+    StripeController
+};
 use App\Http\Middleware\{Require2FA, Ensure2FASetup};
 use Illuminate\Support\Facades\Route;
 
@@ -32,6 +33,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/{sqid}/block-ip/{ipAddress}', 'blockIp');
         Route::delete('/{sqid}/unblock-ip/{ipAddress}', 'unblockIp');
     });
+    Route::get('user/transactions', [UserController::class, 'getUserTransactions']);
 
     // Upload routes
     Route::apiResource('uploads', UploadController::class)->middleware(['auth:api', '2fa']);
@@ -64,7 +66,6 @@ Route::prefix('v1')->group(function () {
         Route::delete('/{sqid}/force', 'forceDelete');
         Route::post('/import', 'import');
         Route::get('/export', 'export');
-        Route::get('/user','getUserTransactions');
     });
 
     // Transaction routes

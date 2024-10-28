@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\StorageProviderEnum;
 use App\Exports\DynamicExport;
+use App\Http\Resources\TransactionResource;
 use App\Http\Requests\{BulkRequest, ExportRequest, ImportRequest, IndexRequest, UserRequest};
 use App\Http\Resources\UserResource;
 use App\Imports\DynamicImport;
@@ -19,7 +20,7 @@ use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\{JsonResponse, Resources\Json\AnonymousResourceCollection};
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\{DB, Hash};
+use Illuminate\Support\Facades\{Auth, DB, Hash};
 use Maatwebsite\Excel\Facades\Excel;
 use PragmaRX\Google2FALaravel\Google2FA;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -377,6 +378,30 @@ class UserController extends Controller
             return $this->handleNotFoundException($e);
         } catch (Exception $e) {
             return $this->handleException($e, 'unblocking the IP address');
+        }
+    }
+
+    /**
+     * Get transactions for the authenticated user.
+     *
+     * @param IndexRequest $request
+     * @return JsonResponse|AnonymousResourceCollection
+     */
+    public function getUserTransactions(IndexRequest $request): JsonResponse|AnonymousResourceCollection
+    {
+        try {
+            $user = Auth::user();
+            $query = $user->transactions()
+                ->with(['paymentMethod', 'bankAccount', 'user'])
+                ->when($request->with_trashed, fn($q) => $q->withTrashed())
+                ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['reference', 'description']))
+                ->when($request->order_by, fn($q, $orderBy) => $q->orderBy($orderBy ?? 'created_at', $request->order_direction ?? 'desc'))
+                ->when($request->start_date && $request->end_date, fn($q) => $q->whereBetween('created_at', [Carbon::parse($request->start_date), Carbon::parse($request->end_date)]));
+
+            $transactions = $query->paginate($request->per_page ?? config('app.per_page'));
+            return response()->paginatedSuccess(TransactionResource::collection($transactions), 'User transactions retrieved successfully');
+        } catch (Exception $e) {
+            return $this->handleException($e, 'fetching user transactions');
         }
     }
 }
