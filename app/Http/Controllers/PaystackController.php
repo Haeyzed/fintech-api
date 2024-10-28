@@ -17,7 +17,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Class PaystackController
@@ -183,11 +182,22 @@ class PaystackController extends Controller
             // Confirm if payment was successful
             if ($verificationResult['data']['status'] === 'success') {
                 return DB::transaction(function () use ($transaction, $verificationResult) {
+                    // Check for duplicate transaction
+                    $existingTransaction = Transaction::where('reference', $transaction->reference)
+                        ->where('status', TransactionStatusEnum::COMPLETED)
+                        ->first();
+
+                    if ($existingTransaction) {
+                        return response()->badRequest('This transaction has already been processed.');
+                    }
+
                     $transaction->status = TransactionStatusEnum::COMPLETED;
 
                     // Update the bank-account balance
                     $bankAccount = $transaction->bankAccount;
+                    $transaction->start_balance = $bankAccount->balance;
                     $bankAccount->balance += $transaction->amount;
+                    $transaction->end_balance = $bankAccount->balance;
                     $bankAccount->save();
 
                     $transaction->save();
@@ -264,43 +274,52 @@ class PaystackController extends Controller
         }
 
         try {
-            // Process payment using Paystack authorization
             return DB::transaction(function () use ($request, $user, $paymentMethod, $bankAccount) {
+                // Check if there are enough balances for withdrawal
+                if ($bankAccount->balance < $request->amount) {
+                    return response()->badRequest('Insufficient balance in the bank account');
+                }
+
                 $transaction = new Transaction([
                     'user_id' => $user->id,
                     'payment_method_id' => $paymentMethod->id,
                     'bank_account_id' => $bankAccount->id,
-                    'type' => 'deposit',
+                    'type' => TransactionTypeEnum::WITHDRAWAL,
                     'amount' => $request->amount,
                     'status' => TransactionStatusEnum::PENDING,
-                    'description' => 'Authorized deposit via Paystack',
+                    'description' => 'Withdrawal via Paystack',
+                    'start_balance' => $bankAccount->balance,
                 ]);
                 $transaction->save();
 
-                // Charge the authorization through Paystack service
-                $chargeResult = $this->paystackService->chargeAuthorization($request->amount, $user->email, $paymentMethod);
+                $transferResult = $this->paystackService->initiateWithdrawal($request->amount, $request->reference_code);
 
-                // Handle failed charge attempt
-                if (!$chargeResult['success']) {
-                    throw new Exception($chargeResult['message']);
+                if (!$transferResult['success']) {
+                    throw new Exception($transferResult['message']);
                 }
 
-                // Update transaction status and user balance upon successful charge
                 $transaction->status = TransactionStatusEnum::COMPLETED;
-                $transaction->reference = $chargeResult['data']['reference'];
+                $transaction->reference = $transferResult['data']['reference'];
+
+                // Update bank-account balance
+                $bankAccount->balance -= $request->amount;
+                $transaction->end_balance = $bankAccount->balance;
+                $bankAccount->save();
+
                 $transaction->save();
 
-                $user->balance += $request->amount;
+                // Update user's balance
+                $user->balance -= $request->amount;
                 $user->save();
 
                 return response()->success([
-                    'transaction' => $transaction,
+                    'transaction' => new TransactionResource($transaction),
                     'new_balance' => $user->balance,
-                ], 'Payment processed successfully');
+                    'new_bank_account_balance' => $bankAccount->balance,
+                ], 'Withdrawal successful');
             });
         } catch (Exception $e) {
-            // Handle exceptions during the authorization process
-            return $this->handleException($e, 'authorize paystack transaction');
+            return $this->handleException($e, 'withdrawing funds via Paystack');
         }
     }
 
@@ -406,156 +425,6 @@ class PaystackController extends Controller
             });
         } catch (Exception $e) {
             return $this->handleException($e, 'withdrawing funds via Paystack');
-        }
-    }
-
-    /**
-     * Link a bank account to a user.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function linkBankAccount(Request $request): JsonResponse
-    {
-        $request->validate([
-            'account_number' => ['required', 'string'],
-            'bank_code' => ['required', 'string'],
-            'account_name' => ['required', 'string'],
-        ]);
-
-        try {
-            $linkResult = $this->paystackService->linkBankAccount(
-                $request->account_number,
-                $request->bank_code,
-                $request->account_name
-            );
-
-            if (!$linkResult['success']) {
-                return response()->badRequest('Bank account linking failed: ' . $linkResult['message']);
-            }
-
-            $user = Auth::user();
-            $user->payment_methods()->create([
-                'type' => 'bank_account',
-                'details' => $linkResult['data'],
-                'is_active' => true,
-            ]);
-
-            return response()->success($linkResult['data'], 'Bank account linked successfully');
-        } catch (Exception $e) {
-            return $this->handleException($e, 'linking bank account');
-        }
-    }
-
-    /**
-     * List all transfer recipients.
-     *
-     * @return JsonResponse
-     */
-    public function listTransferRecipients(): JsonResponse
-    {
-        try {
-            $result = $this->paystackService->listTransferRecipients();
-            return response()->success($result, 'OK');
-        } catch (Exception $e) {
-            return $this->handleException($e, 'listing transfer recipients');
-        }
-    }
-
-    /**
-     * Fetch a specific transfer recipient.
-     *
-     * @param string $recipientCode
-     * @return JsonResponse
-     */
-    public function fetchTransferRecipient(string $recipientCode): JsonResponse
-    {
-        try {
-            $result = $this->paystackService->fetchTransferRecipient($recipientCode);
-            return response()->success($result, 'OK');
-        } catch (Exception $e) {
-            return $this->handleException($e, 'fetching transfer recipient');
-        }
-    }
-
-    /**
-     * Update a transfer recipient.
-     *
-     * @param Request $request
-     * @param string $recipientCode
-     * @return JsonResponse
-     */
-    public function updateTransferRecipient(Request $request, string $recipientCode): JsonResponse
-    {
-        try {
-            $result = $this->paystackService->updateTransferRecipient($recipientCode, $request->all());
-            return response()->success($result, 'OK');
-        } catch (Exception $e) {
-            return $this->handleException($e, 'updating transfer recipient');
-        }
-    }
-
-    /**
-     * Delete a transfer recipient.
-     *
-     * @param string $recipientCode
-     * @return JsonResponse
-     */
-    public function deleteTransferRecipient(string $recipientCode): JsonResponse
-    {
-        try {
-            $result = $this->paystackService->deleteTransferRecipient($recipientCode);
-            return response()->success($result, 'OK');
-        } catch (Exception $e) {
-            return $this->handleException($e, 'deleting transfer recipient');
-        }
-    }
-
-    /**
-     * Create a new transfer recipient.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function createTransferRecipient(Request $request): JsonResponse
-    {
-        try {
-            $result = $this->paystackService->createTransferRecipient($request->all());
-            return response()->success($result, 'OK');
-        } catch (Exception $e) {
-            return $this->handleException($e, 'creating transfer recipient');
-        }
-    }
-
-    /**
-     * Initiate a transfer.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function initiateTransfer(Request $request): JsonResponse
-    {
-        try {
-            $result = $this->paystackService->initiateTransfer($request->all());
-            return response()->success($result, 'OK');
-        } catch (Exception $e) {
-            return $this->handleException($e, 'initiating transfer');
-        }
-    }
-
-    /**
-     * Finalize a transfer.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function finalizeTransfer(Request $request): JsonResponse
-    {
-        try {
-            $result = $this->paystackService->finalizeTransfer($request->transfer_code, $request->otp);
-            return response()->success($result, 'OK');
-        } catch (Exception $e) {
-            return $this->handleException($e, 'finalizing transfer');
         }
     }
 

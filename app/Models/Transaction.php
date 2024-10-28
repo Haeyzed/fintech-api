@@ -28,6 +28,8 @@ class Transaction extends Model
         'payment_method_id',
         'type',
         'amount',
+        'start_balance',
+        'end_balance',
         'status',
         'description',
         'reference',
@@ -40,6 +42,8 @@ class Transaction extends Model
      */
     protected $casts = [
         'amount' => 'decimal:2',
+        'start_balance' => 'decimal:2',
+        'end_balance' => 'decimal:2',
         'type' => TransactionTypeEnum::class,
         'status' => TransactionStatusEnum::class,
     ];

@@ -22,7 +22,9 @@ return new class extends Migration
             $table->foreignIdFor(BankAccount::class)->nullable()->constrained()->cascadeOnDelete();
             $table->foreignIdFor(PaymentMethod::class)->nullable()->constrained()->nullOnDelete();
             $table->string('type');
-            $table->decimal('amount', 10, 2);
+            $table->decimal('amount', 10)->default(0);
+            $table->decimal('start_balance', 10)->default(0);
+            $table->decimal('end_balance', 10)->default(0);
             $table->string('status')->default(TransactionStatusEnum::PENDING);
             $table->string('description')->nullable();
             $table->timestamps();
