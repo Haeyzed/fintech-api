@@ -94,7 +94,7 @@ class TransactionController extends Controller
         ]);
 
         try {
-            $query = Transaction::query()->with(['user', 'paymentMethod','bankAccount','bankAccount.bank'])
+            $query = Transaction::query()->with(['user', 'paymentMethod','bankAccount','bankAccount.bank','bankAccount.bank.currency'])
                 ->when($request->with_trashed, fn($q) => $q->withTrashed())
                 ->when($request->user_id ?? Auth::id(), fn($q, $userId) => $q->where('user_id', $userId))
                 ->when($request->search, fn($q, $search) => app('search')->apply($q, $search, ['reference', 'description']))

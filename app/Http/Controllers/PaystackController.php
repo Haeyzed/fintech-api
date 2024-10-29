@@ -98,7 +98,7 @@ class PaystackController extends Controller
                 if (!$paymentMethod) {
                     return response()->notFound('Invalid payment method');
                 }
-                $bankAccount = BankAccount::findBySqid($request->bank_account_id)->where('user_id', $user->id)->first();
+                $bankAccount = BankAccount::findBySqidOrFail($request->bank_account_id);
                 if (!$bankAccount) {
                     return response()->notFound('Invalid bank account');
                 }
@@ -283,7 +283,7 @@ class PaystackController extends Controller
         if (!$paymentMethod) {
             return response()->notFound('Invalid payment method');
         }
-        $bankAccount = BankAccount::findBySqid($request->bank_account_id)->where('user_id', $user->id)->first();
+        $bankAccount = BankAccount::findBySqidOrFail($request->bank_account_id);
         if (!$bankAccount) {
             return response()->notFound('Invalid bank account');
         }
@@ -404,7 +404,7 @@ class PaystackController extends Controller
         }
 
         // Fetch a bank account
-        $bankAccount = BankAccount::findBySqid($request->bank_account_id)->where('user_id', $user->id)->first();
+        $bankAccount = BankAccount::findBySqidOrFail($request->bank_account_id);
         if (!$bankAccount) {
             return response()->notFound('Invalid bank account');
         }
