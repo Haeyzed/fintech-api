@@ -394,7 +394,9 @@ class PaystackController extends Controller
 
         // Confirm sufficient balance
         if ($user->balance < $request->amount) {
-            return response()->badRequest('Insufficient balance');
+            return response()->unprocessableEntity([
+                'amount' => ['The requested withdrawal amount exceeds your available balance.']
+            ], 'Insufficient balance');
         }
 
         // Fetch active payment method
