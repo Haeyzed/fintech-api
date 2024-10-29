@@ -44,7 +44,7 @@ Authorization: Bearer <your-token-here>
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/fintech-api.git
+   git clone https://github.com/Haeyzed/fintech-api.git
    cd fintech-api
    ```
 
