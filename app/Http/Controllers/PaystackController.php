@@ -81,6 +81,13 @@ class PaystackController extends Controller
              * @example EfhxLZ9ck8
              */
             'bank_account_id' => ['required', new SqidExists('bank_accounts')],
+
+            /**
+             * The description of the withdrawal.
+             * @var string|null $description
+             * @example 500
+             */
+            'description' => ['nullable', 'string'],
         ]);
 
         try {
@@ -117,7 +124,7 @@ class PaystackController extends Controller
                     'type' => TransactionTypeEnum::DEPOSIT,
                     'amount' => $request->amount,
                     'status' => TransactionStatusEnum::PENDING,
-                    'description' => 'Deposit via Paystack',
+                    'description' => $request->description ?? 'Deposit via Paystack',
 //                    'details' => [
 //                        "authorization_url" => $initializationResult['data']['authorization_url'],
 //                        "access_code" => $initializationResult['data']['access_code'],
@@ -232,6 +239,7 @@ class PaystackController extends Controller
      * - Charging the payment method via Paystack
      * - Creating a new Transaction record
      * - Updating the user's balance
+     * - Updating the user's respective bank-account balance
      *
      * @param Request $request The incoming request containing payment details.
      * @return TransactionResource|JsonResponse The JSON response indicating the result of the payment process.
@@ -260,6 +268,13 @@ class PaystackController extends Controller
              * @example EfhxLZ9ck8
              */
             'bank_account_id' => ['required', new SqidExists('bank_accounts')],
+
+            /**
+             * The description of the withdrawal.
+             * @var string|null $description
+             * @example 500
+             */
+            'description' => ['nullable', 'string'],
         ]);
 
         // Fetch user and validate active payment method
@@ -365,9 +380,17 @@ class PaystackController extends Controller
              * @example 500
              */
             'reference_code' => ['nullable', 'string'],
+
+            /**
+             * The description of the withdrawal.
+             * @var string|null $description
+             * @example 500
+             */
+            'description' => ['nullable', 'string'],
         ]);
 
         $user = Auth::user();
+        $reference = $this->paystackService->generateUniqueReference();
 
         // Confirm sufficient balance
         if ($user->balance < $request->amount) {
@@ -387,7 +410,7 @@ class PaystackController extends Controller
         }
 
         try {
-            return DB::transaction(function () use ($request, $user, $paymentMethod, $bankAccount) {
+            return DB::transaction(function () use ($reference, $request, $user, $paymentMethod, $bankAccount) {
                 $transaction = new Transaction([
                     'user_id' => $user->id,
                     'payment_method_id' => $paymentMethod->id,
@@ -395,18 +418,21 @@ class PaystackController extends Controller
                     'type' => TransactionTypeEnum::WITHDRAWAL,
                     'amount' => $request->amount,
                     'status' => TransactionStatusEnum::PENDING,
-                    'description' => 'Withdrawal via Paystack',
+                    'description' => $request->description ?? 'Withdrawal via Paystack',
+                    'start_balance' => $bankAccount->balance,
                 ]);
                 $transaction->save();
 
-                $transferResult = $this->paystackService->initiateWithdrawal($request->amount, $request->reference_code);
-
-                if (!$transferResult['success']) {
-                    throw new Exception($transferResult['message']);
-                }
+//                $transferResult = $this->paystackService->initiateWithdrawal($request->amount, $request->reference_code);
+//
+//                if (!$transferResult['success']) {
+//                    throw new Exception($transferResult['message']);
+//                }
 
                 $transaction->status = TransactionStatusEnum::COMPLETED;
-                $transaction->reference = $transferResult['data']['reference'];
+//                $transaction->reference = $transferResult['data']['reference'];
+                $transaction->reference = $reference;
+                $transaction->end_balance = $bankAccount->balance - $request->amount;
                 $transaction->save();
 
                 // Update user's balance
