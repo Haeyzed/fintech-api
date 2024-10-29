@@ -48,6 +48,20 @@ class TransactionResource extends JsonResource
             'amount' => $this->amount,
 
             /**
+             * The amount of the transaction.
+             * @var float $start_balance
+             * @example 100.50
+             */
+            'start_balance' => $this->start_balance,
+
+            /**
+             * The amount of the transaction.
+             * @var float $end_balance
+             * @example 100.50
+             */
+            'end_balance' => $this->end_balance,
+
+            /**
              * The status of the transaction (e.g., 'pending', 'completed', 'failed').
              * @var string $status
              * @example "completed"
